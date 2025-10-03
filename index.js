@@ -11,12 +11,26 @@ const PORT = process.env.PORT || 3001;
 // MongoDB Connection
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
+    if (!process.env.DA_DATABASE_URL_MONGODB_URI) {
+      throw new Error('DA_DATABASE_URL_MONGODB_URI environment variable is not defined');
+    }
+    
+    const conn = await mongoose.connect(process.env.DA_DATABASE_URL_MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      maxPoolSize: 10, // Maintain up to 10 socket connections
+      minPoolSize: 5, // Maintain a minimum of 5 socket connections
+      maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
+      bufferMaxEntries: 0, // Disable mongoose buffering
+      bufferCommands: false, // Disable mongoose buffering
+    });
 
     console.log(`🍃 MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
-    process.exit(1);
+    // Don't exit in production/Vercel environment, just log the error
+    if (process.env.NODE_ENV !== 'production') {
+      process.exit(1);
+    }
   }
 };
 

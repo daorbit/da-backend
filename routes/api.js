@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
+const mongoose = require('mongoose');
 const router = express.Router();
 
 const User = require('../models/User');
@@ -8,6 +9,9 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 // Helper function to generate JWT token
 const generateToken = (userId) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is not defined');
+  }
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
     expiresIn: '7d' // Token expires in 7 days
   });
@@ -31,6 +35,14 @@ authRouter.post('/register', [
     .withMessage('Password must be at least 6 characters long')
 ], async (req, res) => {
   try {
+    // Check if database is connected
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+    
     // Check for validation errors
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -44,7 +56,17 @@ authRouter.post('/register', [
     const { name, email, password } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findByEmail(email);
+    let existingUser;
+    try {
+      existingUser = await User.findByEmail(email);
+    } catch (findError) {
+      console.error('Error checking existing user:', findError);
+      return res.status(500).json({
+        success: false,
+        message: 'Database error while checking user existence'
+      });
+    }
+    
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -59,21 +81,22 @@ authRouter.post('/register', [
       password
     });
 
-    await user.save();
+    // Save user to database
+    const savedUser = await user.save();
 
     // Generate JWT token
-    const token = generateToken(user._id);
+    const token = generateToken(savedUser._id);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
       token,
       user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        createdAt: user.createdAt
+        id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        role: savedUser.role,
+        createdAt: savedUser.createdAt
       }
     });
 
@@ -275,7 +298,13 @@ router.get('/test', (req, res) => {
     message: 'API test endpoint working!',
     timestamp: new Date().toISOString(),
     method: req.method,
-    path: req.path
+    path: req.path,
+    environment: {
+      nodeEnv: process.env.NODE_ENV,
+      hasJwtSecret: !!process.env.JWT_SECRET,
+      hasMongoUri: !!process.env.DA_DATABASE_URL_MONGODB_URI,
+      mongooseReady: mongoose.connection.readyState === 1
+    }
   });
 });
 

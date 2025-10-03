@@ -26,6 +26,14 @@ const authMiddleware = async (req, res, next) => {
       });
     }
 
+    // Check if JWT_SECRET exists
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({
+        success: false,
+        message: 'Server configuration error - JWT secret not found'
+      });
+    }
+    
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
