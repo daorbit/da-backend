@@ -26,33 +26,57 @@ connectDB();
 // Middleware
 app.use(helmet()); // Security headers
 
-// CORS configuration - allow multiple origins
-const allowedOrigins = [
-  'http://localhost:5173', // Local development
-  'http://localhost:3000', // Alternative dev port
-  'https://da-admin-five.vercel.app', // Production frontend
-  process.env.FRONTEND_URL // Environment variable override
-].filter(Boolean); // Remove any undefined values
+// CORS configuration
+const isDevelopment = process.env.NODE_ENV !== 'production';
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+if (isDevelopment) {
+  // More permissive CORS for development
+  app.use(cors({
+    origin: true, // Allow all origins in development
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200
+  }));
+} else {
+  // Restrictive CORS for production
+  const allowedOrigins = [
+    'https://da-admin-five.vercel.app', // Production frontend
+    'https://da-admin.vercel.app', // Alternative production URL
+    process.env.FRONTEND_URL // Environment variable override
+  ].filter(Boolean);
+
+  app.use(cors({
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
+      }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 200
+  }));
+}
 
 app.use(morgan('combined')); // Logging
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Handle preflight OPTIONS requests
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
 
 // Routes
 app.get('/', (req, res) => {
