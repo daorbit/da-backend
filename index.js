@@ -11,31 +11,52 @@ const PORT = process.env.PORT || 3001;
 // MongoDB Connection
 const connectDB = async () => {
   try {
-    if (!process.env.DA_DATABASE_URL_MONGODB_URI) {
-      throw new Error('DA_DATABASE_URL_MONGODB_URI environment variable is not defined');
+    // Support both environment variable names for backward compatibility
+    const mongoUri = process.env.MONGODB_URI || process.env.DA_DATABASE_URL_MONGODB_URI;
+    
+    if (!mongoUri) {
+      throw new Error('MONGODB_URI environment variable is not defined');
     }
     
-    const conn = await mongoose.connect(process.env.DA_DATABASE_URL_MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+    console.log('🔗 Attempting to connect to MongoDB...');
+    
+    const conn = await mongoose.connect(mongoUri, {
+      serverSelectionTimeoutMS: 10000, // Increase timeout to 10s
+      socketTimeoutMS: 45000,
       maxPoolSize: 10, // Maintain up to 10 socket connections
-      minPoolSize: 5, // Maintain a minimum of 5 socket connections
-      maxIdleTimeMS: 30000, // Close connections after 30 seconds of inactivity
-      bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false, // Disable mongoose buffering
     });
 
     console.log(`🍃 MongoDB Connected: ${conn.connection.host}`);
+    console.log(`📊 Connection state: ${mongoose.connection.readyState}`);
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
-    // Don't exit in production/Vercel environment, just log the error
+    console.error('🔍 MongoDB URI exists:', !!mongoUri);
+    console.error('🌍 Environment:', process.env.NODE_ENV);
+    
+    // In production, don't exit but still log the error
     if (process.env.NODE_ENV !== 'production') {
       process.exit(1);
+    } else {
+      console.log('⚠️  Continuing without database connection in production mode');
     }
   }
 };
 
 // Connect to database
 connectDB();
+
+// Handle MongoDB connection events
+mongoose.connection.on('connected', () => {
+  console.log('🔗 Mongoose connected to MongoDB');
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('🔥 Mongoose connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('🔌 Mongoose disconnected from MongoDB');
+});
 
 // Middleware
 app.use(helmet()); // Security headers

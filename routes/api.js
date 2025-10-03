@@ -37,9 +37,15 @@ authRouter.post('/register', [
   try {
     // Check if database is connected
     if (mongoose.connection.readyState !== 1) {
+      console.error('🔥 Database connection state:', mongoose.connection.readyState);
+      console.error('🔥 Available states: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting');
       return res.status(503).json({
         success: false,
-        message: 'Database connection not available'
+        message: 'Database connection not available',
+        debug: {
+          connectionState: mongoose.connection.readyState,
+          hasMongoUri: !!(process.env.MONGODB_URI || process.env.DA_DATABASE_URL_MONGODB_URI)
+        }
       });
     }
     
