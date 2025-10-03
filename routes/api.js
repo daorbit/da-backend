@@ -35,8 +35,8 @@ authRouter.post('/register', [
     .withMessage('Password must be at least 6 characters long')
 ], async (req, res) => {
   try {
-    // Check if database is connected
-    if (mongoose.connection.readyState !== 1) {
+    // Check if database is connected (allow connecting state)
+    if (mongoose.connection.readyState === 0 || mongoose.connection.readyState === 3) {
       console.error('🔥 Database connection state:', mongoose.connection.readyState);
       console.error('🔥 Available states: 0=disconnected, 1=connected, 2=connecting, 3=disconnecting');
       return res.status(503).json({
@@ -47,6 +47,23 @@ authRouter.post('/register', [
           hasMongoUri: !!(process.env.MONGODB_URI || process.env.DA_DATABASE_URL_MONGODB_URI)
         }
       });
+    }
+    
+    // If connecting (state 2), wait a moment for connection to complete
+    if (mongoose.connection.readyState === 2) {
+      console.log('⏳ Database is connecting, waiting...');
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+      
+      if (mongoose.connection.readyState !== 1) {
+        return res.status(503).json({
+          success: false,
+          message: 'Database connection timeout',
+          debug: {
+            connectionState: mongoose.connection.readyState,
+            hasMongoUri: !!(process.env.MONGODB_URI || process.env.DA_DATABASE_URL_MONGODB_URI)
+          }
+        });
+      }
     }
     
     // Check for validation errors
@@ -308,7 +325,7 @@ router.get('/test', (req, res) => {
     environment: {
       nodeEnv: process.env.NODE_ENV,
       hasJwtSecret: !!process.env.JWT_SECRET,
-      hasMongoUri: !!process.env.DA_DATABASE_URL_MONGODB_URI,
+      hasMongoUri: !!(process.env.MONGODB_URI || process.env.DA_DATABASE_URL_MONGODB_URI),
       mongooseReady: mongoose.connection.readyState === 1
     }
   });

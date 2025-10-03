@@ -42,7 +42,27 @@ const connectDB = async () => {
   }
 };
 
-// Connect to database
+// Connect to database with retry logic for serverless
+let isConnecting = false;
+
+const ensureConnection = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return; // Already connected
+  }
+  
+  if (isConnecting) {
+    return; // Connection in progress
+  }
+  
+  isConnecting = true;
+  try {
+    await connectDB();
+  } finally {
+    isConnecting = false;
+  }
+};
+
+// Initial connection
 connectDB();
 
 // Handle MongoDB connection events
@@ -57,6 +77,9 @@ mongoose.connection.on('error', (err) => {
 mongoose.connection.on('disconnected', () => {
   console.log('🔌 Mongoose disconnected from MongoDB');
 });
+
+// Export the connection helper for use in routes
+module.exports.ensureConnection = ensureConnection;
 
 // Middleware
 app.use(helmet()); // Security headers
