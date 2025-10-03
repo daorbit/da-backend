@@ -14,6 +14,6 @@
   ],
   "env": {
     "PORT": "8000",
-    "MONGODB_URI": ""
+    "MONGODB_URI": "mongodb+srv://Vercel-Admin-da-orbit:dAEVc5Rxg5qOnaku@da-orbit.5lsdrn1.mongodb.net/?retryWrites=true&w=majority"
   }
   }
