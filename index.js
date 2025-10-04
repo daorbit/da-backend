@@ -101,6 +101,9 @@ if (isDevelopment) {
   const allowedOrigins = [
     'https://da-admin-five.vercel.app', // Production frontend
     'https://da-admin.vercel.app', // Alternative production URL
+    'http://localhost:3000', // Local development
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:3001', // Alternative local port
     process.env.FRONTEND_URL // Environment variable override
   ].filter(Boolean);
 
@@ -118,7 +121,7 @@ if (isDevelopment) {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'sec-ch-ua', 'sec-ch-ua-mobile', 'sec-ch-ua-platform'],
     optionsSuccessStatus: 200
   }));
 }
