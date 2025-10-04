@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const router = express.Router();
 
 const User = require('../models/User');
+const Lead = require('../models/Lead');
 const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 // Helper function to generate JWT token
@@ -310,10 +311,229 @@ dataRouter.get('/analytics', (req, res) => {
   });
 });
 
+// Lead routes (for landing page contact form)
+const leadRouter = express.Router();
+
+// POST /api/leads - Submit a new lead (no authentication required)
+leadRouter.post('/', [
+  body('name')
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Please enter a valid email'),
+  body('company')
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage('Company name cannot exceed 100 characters'),
+  body('message')
+    .trim()
+    .isLength({ min: 10, max: 1000 })
+    .withMessage('Message must be between 10 and 1000 characters')
+], async (req, res) => {
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { name, email, company, message } = req.body;
+
+    // Get client IP and user agent for tracking
+    const ipAddress = req.ip || req.connection.remoteAddress || req.socket.remoteAddress || 
+                     (req.connection.socket ? req.connection.socket.remoteAddress : null);
+    const userAgent = req.get('User-Agent');
+
+    // Create new lead
+    const lead = new Lead({
+      name,
+      email,
+      company: company || '',
+      message,
+      ipAddress,
+      userAgent
+    });
+
+    await lead.save();
+
+    console.log('✅ New lead submitted:', { name, email, company });
+
+    res.status(201).json({
+      success: true,
+      message: 'Thank you for your message! We will get back to you soon.',
+      data: {
+        id: lead._id,
+        name: lead.name,
+        email: lead.email,
+        company: lead.company,
+        createdAt: lead.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating lead:', error);
+    res.status(500).json({
+      success: false,
+      message: 'An error occurred while submitting your message. Please try again.',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// GET /api/leads - Get all leads (admin only)
+leadRouter.get('/', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const status = req.query.status;
+    const search = req.query.search;
+
+    // Build query
+    let query = {};
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { company: { $regex: search, $options: 'i' } },
+        { message: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Get leads with pagination
+    const leads = await Lead.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // Get total count for pagination
+    const total = await Lead.countDocuments(query);
+
+    // Get status counts for dashboard
+    const statusCounts = await Lead.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+
+    const statusStats = statusCounts.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        leads,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats: {
+          total,
+          ...statusStats
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching leads:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching leads',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// PUT /api/leads/:id/status - Update lead status (admin only)
+leadRouter.put('/:id/status', authMiddleware, adminMiddleware, [
+  body('status')
+    .isIn(['new', 'contacted', 'qualified', 'converted', 'closed'])
+    .withMessage('Invalid status value')
+], async (req, res) => {
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const lead = await Lead.findByIdAndUpdate(
+      id,
+      { status },
+      { new: true, runValidators: true }
+    );
+
+    if (!lead) {
+      return res.status(404).json({
+        success: false,
+        message: 'Lead not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Lead status updated successfully',
+      data: lead
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating lead status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating lead status',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
 // Mount sub-routers
 router.use('/users', usersRouter);
 router.use('/auth', authRouter);
 router.use('/data', dataRouter);
+router.use('/leads', leadRouter);
 
 // Test endpoint
 router.get('/test', (req, res) => {
