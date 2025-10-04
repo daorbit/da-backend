@@ -104,6 +104,8 @@ if (isDevelopment) {
     'http://localhost:3000', // Local development
     'http://localhost:5173', // Vite dev server
     'http://localhost:3001', // Alternative local port
+    'https://www.daorbit.in/',
+    'https://www.daorbit.in',
     process.env.FRONTEND_URL // Environment variable override
   ].filter(Boolean);
 
