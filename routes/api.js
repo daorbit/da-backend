@@ -241,20 +241,74 @@ const usersRouter = express.Router();
 // Get all users (admin only)
 usersRouter.get('/', authMiddleware, adminMiddleware, async (req, res) => {
   try {
-    const users = await User.find({})
-      .select('-password')
-      .sort({ createdAt: -1 });
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search;
+    const role = req.query.role;
+
+    // Build query
+    let query = {};
+    if (role && role !== 'all') {
+      query.role = role;
+    }
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Get users with pagination
+    const users = await User.find(query)
+      .select('-password') // Exclude password field
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    // Get total count for pagination
+    const total = await User.countDocuments(query);
+
+    // Get role counts for dashboard
+    const roleCounts = await User.aggregate([
+      { $group: { _id: '$role', count: { $sum: 1 } } }
+    ]);
+
+    const roleStats = roleCounts.reduce((acc, item) => {
+      acc[item._id] = item.count;
+      return acc;
+    }, {});
 
     res.json({
       success: true,
-      count: users.length,
-      users
+      data: {
+        users,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit)
+        },
+        stats: {
+          total,
+          ...roleStats
+        }
+      }
     });
+
   } catch (error) {
-    console.error('Get users error:', error);
+    console.error('❌ Error fetching users:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error fetching users'
+      message: 'Error fetching users',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
@@ -273,13 +327,143 @@ usersRouter.get('/:id', authMiddleware, adminMiddleware, async (req, res) => {
 
     res.json({
       success: true,
-      user
+      data: user
     });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error fetching user'
+    });
+  }
+});
+
+// PUT /api/users/:id/role - Update user role (admin only)
+usersRouter.put('/:id/role', authMiddleware, adminMiddleware, [
+  body('role')
+    .isIn(['user', 'admin'])
+    .withMessage('Invalid role value')
+], async (req, res) => {
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { id } = req.params;
+    const { role } = req.body;
+
+    // Prevent user from changing their own role
+    if (id === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot change your own role'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { role },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'User role updated successfully',
+      data: user
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating user role:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user role',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// PUT /api/users/:id/status - Toggle user active status (admin only)
+usersRouter.put('/:id/status', authMiddleware, adminMiddleware, [
+  body('isActive')
+    .isBoolean()
+    .withMessage('isActive must be a boolean value')
+], async (req, res) => {
+  try {
+    // Check database connection
+    if (mongoose.connection.readyState !== 1) {
+      return res.status(503).json({
+        success: false,
+        message: 'Database connection not available'
+      });
+    }
+
+    // Check for validation errors
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    // Prevent user from deactivating themselves
+    if (id === req.user.id && !isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot deactivate your own account'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      { isActive },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
+      data: user
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating user status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user status',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
