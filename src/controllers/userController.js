@@ -147,9 +147,38 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
+/**
+ * Delete user
+ */
+const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Prevent user from deleting themselves
+    if (id === req.user.id) {
+      return sendError(res, 'You cannot delete your own account', 400);
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      return sendError(res, 'User not found', 404);
+    }
+
+    // Delete the user
+    await User.findByIdAndDelete(id);
+
+    sendSuccess(res, null, 'User deleted successfully');
+
+  } catch (error) {
+    console.error('❌ Error deleting user:', error);
+    sendError(res, 'Error deleting user');
+  }
+};
+
 module.exports = {
   getAllUsers,
   getUserById,
   updateUserRole,
-  updateUserStatus
+  updateUserStatus,
+  deleteUser
 };

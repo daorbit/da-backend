@@ -46,4 +46,13 @@ router.put(
   userController.updateUserStatus
 );
 
+// Delete user (admin only)
+router.delete(
+  '/:id',
+  authMiddleware,
+  adminMiddleware,
+  checkDatabaseConnection,
+  userController.deleteUser
+);
+
 module.exports = router;
