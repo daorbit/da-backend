@@ -13,6 +13,7 @@ const getAllowedOrigins = () => {
     'http://localhost:3001', // Alternative local port
     'https://www.daorbit.in/',
     'https://www.daorbit.in',
+    'https://admin.daorbit.in',
     'https://admin.daorbit.in/',
     process.env.FRONTEND_URL // Environment variable override
   ].filter(Boolean);
