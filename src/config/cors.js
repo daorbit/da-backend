@@ -15,6 +15,10 @@ const getAllowedOrigins = () => {
     'https://www.daorbit.in',
     'https://admin.daorbit.in',
     'https://admin.daorbit.in/',
+    'https://techodio.daorbit.in',
+    'https://snappixy.daorbit.in', 
+    'https://draft2dev.daorbit.in',
+    'https://snappixy.vercel.app/',
     process.env.FRONTEND_URL // Environment variable override
   ].filter(Boolean);
 

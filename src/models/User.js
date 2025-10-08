@@ -20,9 +20,27 @@ const userSchema = new mongoose.Schema({
   },
   password: {
     type: String,
-    required: [true, 'Password is required'],
+    required: function() {
+      return !this.googleId; // Password is required only if not signing up with Google
+    },
     minlength: [6, 'Password must be at least 6 characters long'],
     select: false // Don't include password in queries by default
+  },
+  googleId: {
+    type: String,
+    unique: true,
+    sparse: true // Allows multiple null values
+  },
+  authProvider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
+  },
+  sourceApp: {
+    type: String,
+    enum: ['snappixy', 'the-techodio', 'draft2dev', 'da-admin'],
+    required: [true, 'Source app is required'],
+    index: true
   },
   role: {
     type: String,
@@ -59,6 +77,9 @@ userSchema.pre('save', function(next) {
 
 // Hash password before saving
 userSchema.pre('save', async function(next) {
+  // Skip password hashing if user is signing up with Google
+  if (this.authProvider === 'google' && !this.password) return next();
+  
   // Only hash the password if it has been modified (or is new)
   if (!this.isModified('password')) return next();
 

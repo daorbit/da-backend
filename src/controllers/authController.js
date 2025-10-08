@@ -7,7 +7,7 @@ const { sendSuccess, sendError } = require('../utils/responseHandler');
  */
 const register = async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, sourceApp } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findByEmail(email);
@@ -20,7 +20,9 @@ const register = async (req, res) => {
     const user = new User({
       name,
       email,
-      password
+      password,
+      sourceApp: sourceApp || 'da-admin',
+      authProvider: 'local'
     });
 
     // Save user to database
@@ -38,6 +40,8 @@ const register = async (req, res) => {
           name: savedUser.name,
           email: savedUser.email,
           role: savedUser.role,
+          sourceApp: savedUser.sourceApp,
+          authProvider: savedUser.authProvider,
           createdAt: savedUser.createdAt
         }
       },
@@ -48,6 +52,77 @@ const register = async (req, res) => {
   } catch (error) {
     console.error('Registration error:', error);
     sendError(res, 'Server error during registration');
+  }
+};
+
+/**
+ * Register/Login user with Google OAuth
+ */
+const googleAuth = async (req, res) => {
+  try {
+    const { name, email, googleId, avatar, sourceApp } = req.body;
+
+    if (!sourceApp) {
+      return sendError(res, 'Source app is required', 400);
+    }
+
+    // Check if user already exists with this email
+    let user = await User.findByEmail(email);
+    
+    if (user) {
+      // If user exists but doesn't have googleId, update it
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.authProvider = 'google';
+        if (avatar) user.avatar = avatar;
+        user.lastLogin = new Date();
+        await user.save();
+      } else {
+        // Just update last login
+        user.lastLogin = new Date();
+        await user.save();
+      }
+    } else {
+      // Create new user with Google OAuth
+      user = new User({
+        name,
+        email,
+        googleId,
+        avatar,
+        sourceApp,
+        authProvider: 'google',
+        lastLogin: new Date()
+      });
+      
+      await user.save();
+    }
+
+    // Generate JWT token
+    const token = generateToken(user._id);
+
+    sendSuccess(
+      res,
+      {
+        token,
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          sourceApp: user.sourceApp,
+          authProvider: user.authProvider,
+          avatar: user.avatar,
+          lastLogin: user.lastLogin,
+          createdAt: user.createdAt
+        }
+      },
+      user.createdAt === user.updatedAt ? 'User registered successfully with Google' : 'Login successful',
+      user.createdAt === user.updatedAt ? 201 : 200
+    );
+
+  } catch (error) {
+    console.error('Google OAuth error:', error);
+    sendError(res, 'Server error during Google authentication');
   }
 };
 
@@ -123,6 +198,7 @@ const logout = (req, res) => {
 module.exports = {
   register,
   login,
+  googleAuth,
   getCurrentUser,
   logout
 };
