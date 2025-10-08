@@ -24,12 +24,7 @@ router.post(
   authController.login
 );
 
-// Google OAuth endpoint
-router.post(
-  '/google',
-  checkDatabaseConnection,
-  authController.googleAuth
-);
+ 
 
 // Get current user profile (protected route)
 router.get('/me', authMiddleware, authController.getCurrentUser);
