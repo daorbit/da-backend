@@ -14,7 +14,7 @@
   ],
   "env": {
     "PORT": "8000",
-    "DA_DATABASE_URL_MONGODB_URI": "mongodb+srv://Vercel-Admin-da-orbit:GyPcXlfAVH01e2eV@da-orbit.5lsdrn1.mongodb.net/?retryWrites=true&w=majority",
+    "DA_DATABASE_URL_MONGODB_URI": "mongodb+srv://Vercel-Admin-da-orbit-db:E9EEwcGS9tKCceuT@da-orbit-db.mus3jx8.mongodb.net/?retryWrites=true&w=majority",
     "JWT_SECRET": "your-super-secret-jwt-key-change-this-in-production-2024",
     "NODE_ENV": "production"
   }
